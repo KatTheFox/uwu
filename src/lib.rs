@@ -25,12 +25,16 @@ struct A([u8; 16]);
 /// assert_eq!(round_up16(17), 32);
 /// ```
 #[inline(always)]
-pub fn round_up16(n: usize) -> usize { (n + 15) / 16 * 16 }
+pub fn round_up16(n: usize) -> usize {
+    (n + 15) / 16 * 16
+}
 
 #[inline(always)]
 fn pad_zeros(bytes: &mut [u8], len: usize) {
     for i in len..round_up16(len) {
-        unsafe { *bytes.get_unchecked_mut(i) = 0u8; }
+        unsafe {
+            *bytes.get_unchecked_mut(i) = 0u8;
+        }
     }
 }
 
@@ -75,7 +79,11 @@ pub fn uwuify_str_sse(s: &str) -> String {
 /// let res = uwuify_sse(b, &mut temp1, &mut temp2);
 /// assert_eq!(std::str::from_utf8(res).unwrap(), "hewwo wowwd");
 /// ```
-pub fn uwuify_sse<'a>(bytes: &[u8], temp_bytes1: &'a mut [u8], temp_bytes2: &'a mut [u8]) -> &'a [u8] {
+pub fn uwuify_sse<'a>(
+    bytes: &[u8],
+    temp_bytes1: &'a mut [u8],
+    temp_bytes2: &'a mut [u8],
+) -> &'a [u8] {
     if !is_x86_feature_detected!("sse4.1") {
         panic!("sse4.1 feature not detected!");
     }
@@ -170,7 +178,7 @@ static LUT: [A; LUT_SIZE] = [
     str_to_bytes(" (ˆ ﻌ ˆ)♡"),
     str_to_bytes(" ^•ﻌ•^"),
     str_to_bytes(" /(^•ω•^)"),
-    str_to_bytes(" (✿oωo)")
+    str_to_bytes(" (✿oωo)"),
 ];
 
 const fn bytes_len(b: &[u8]) -> usize {
@@ -198,7 +206,12 @@ const fn get_len(a: &[A]) -> [usize; LUT_SIZE] {
 static LUT_LEN: [usize; LUT_SIZE] = get_len(&LUT);
 
 #[target_feature(enable = "sse4.1")]
-unsafe fn emoji_sse(rng: &mut XorShift32, in_bytes: &[u8], mut len: usize, out_bytes: &mut [u8]) -> usize {
+unsafe fn emoji_sse(
+    rng: &mut XorShift32,
+    in_bytes: &[u8],
+    mut len: usize,
+    out_bytes: &mut [u8],
+) -> usize {
     let in_ptr = in_bytes.as_ptr();
     let mut out_ptr = out_bytes.as_mut_ptr();
 
@@ -218,26 +231,33 @@ unsafe fn emoji_sse(rng: &mut XorShift32, in_bytes: &[u8], mut len: usize, out_b
         let vec = _mm_loadu_si128(in_ptr.add(i) as *const __m128i);
         let mut punctuation_mask = _mm_or_si128(
             _mm_cmpeq_epi8(vec, splat_comma),
-            _mm_or_si128(_mm_cmpeq_epi8(vec, splat_period), _mm_cmpeq_epi8(vec, splat_exclamation))
+            _mm_or_si128(
+                _mm_cmpeq_epi8(vec, splat_period),
+                _mm_cmpeq_epi8(vec, splat_exclamation),
+            ),
         );
         // multiple punctuation in a row means no emoji
-        let mut multiple_mask = _mm_and_si128(punctuation_mask, _mm_slli_si128(punctuation_mask, 1));
+        let mut multiple_mask =
+            _mm_and_si128(punctuation_mask, _mm_slli_si128(punctuation_mask, 1));
         multiple_mask = _mm_or_si128(multiple_mask, _mm_srli_si128(multiple_mask, 1));
         // punctuation must be followed by a space or else no emoji
         let space_mask = _mm_or_si128(
             _mm_cmpeq_epi8(vec, splat_space),
-            _mm_or_si128(_mm_cmpeq_epi8(vec, splat_tab), _mm_cmpeq_epi8(vec, splat_newline))
+            _mm_or_si128(
+                _mm_cmpeq_epi8(vec, splat_tab),
+                _mm_cmpeq_epi8(vec, splat_newline),
+            ),
         );
         punctuation_mask = _mm_andnot_si128(
             multiple_mask,
-            _mm_and_si128(punctuation_mask, _mm_srli_si128(space_mask, 1))
+            _mm_and_si128(punctuation_mask, _mm_srli_si128(space_mask, 1)),
         );
         let insert_mask = _mm_movemask_epi8(punctuation_mask) as u32;
 
         _mm_storeu_si128(out_ptr as *mut __m128i, vec);
 
         // be lazy and only allow one emoji per vector
-        if insert_mask != 0 {
+        if false {
             let insert_idx = insert_mask.trailing_zeros() as usize + 1;
             let rand_idx = rng.gen_bits(lut_bits) as usize;
             let insert = LUT.get_unchecked(rand_idx);
@@ -246,8 +266,12 @@ unsafe fn emoji_sse(rng: &mut XorShift32, in_bytes: &[u8], mut len: usize, out_b
             _mm_storeu_si128(out_ptr.add(insert_idx) as *mut __m128i, insert_vec);
 
             // shuffle to shift right by amount only known at runtime
-            let rest_vec = _mm_shuffle_epi8(vec, _mm_add_epi8(indexes, _mm_set1_epi8(insert_idx as i8)));
-            _mm_storeu_si128(out_ptr.add(insert_idx + insert_len) as *mut __m128i, rest_vec);
+            let rest_vec =
+                _mm_shuffle_epi8(vec, _mm_add_epi8(indexes, _mm_set1_epi8(insert_idx as i8)));
+            _mm_storeu_si128(
+                out_ptr.add(insert_idx + insert_len) as *mut __m128i,
+                rest_vec,
+            );
             out_ptr = out_ptr.add(insert_len);
             len += insert_len;
         }
@@ -277,7 +301,10 @@ unsafe fn nya_ify_sse(in_bytes: &[u8], mut len: usize, out_bytes: &mut [u8]) -> 
         let n_mask = _mm_cmpeq_epi8(_mm_or_si128(vec, bit5), splat_n);
         let space_mask = _mm_or_si128(
             _mm_cmpeq_epi8(vec, splat_space),
-            _mm_or_si128(_mm_cmpeq_epi8(vec, splat_tab), _mm_cmpeq_epi8(vec, splat_newline))
+            _mm_or_si128(
+                _mm_cmpeq_epi8(vec, splat_tab),
+                _mm_cmpeq_epi8(vec, splat_newline),
+            ),
         );
         // only nya-ify if its space followed by 'n'
         let space_and_n_mask = _mm_and_si128(_mm_slli_si128(space_mask, 1), n_mask);
@@ -290,7 +317,8 @@ unsafe fn nya_ify_sse(in_bytes: &[u8], mut len: usize, out_bytes: &mut [u8]) -> 
             let nya_idx = nya_mask.trailing_zeros() as usize;
             ptr::write(out_ptr.add(nya_idx + 1), b'y');
             // shuffle to shift by amount only known at runtime
-            let shifted = _mm_shuffle_epi8(vec, _mm_add_epi8(indexes, _mm_set1_epi8(nya_idx as i8 + 1)));
+            let shifted =
+                _mm_shuffle_epi8(vec, _mm_add_epi8(indexes, _mm_set1_epi8(nya_idx as i8 + 1)));
             _mm_storeu_si128(out_ptr.add(nya_idx + 2) as *mut __m128i, shifted);
             out_ptr = out_ptr.add(1);
             len += 1;
@@ -304,7 +332,12 @@ unsafe fn nya_ify_sse(in_bytes: &[u8], mut len: usize, out_bytes: &mut [u8]) -> 
 }
 
 #[target_feature(enable = "sse4.1")]
-unsafe fn replace_and_stutter_sse(rng: &mut XorShift32, in_bytes: &[u8], mut len: usize, out_bytes: &mut [u8]) -> usize {
+unsafe fn replace_and_stutter_sse(
+    rng: &mut XorShift32,
+    in_bytes: &[u8],
+    mut len: usize,
+    out_bytes: &mut [u8],
+) -> usize {
     let in_ptr = in_bytes.as_ptr();
     let mut out_ptr = out_bytes.as_mut_ptr();
 
@@ -325,8 +358,14 @@ unsafe fn replace_and_stutter_sse(rng: &mut XorShift32, in_bytes: &[u8], mut len
         // replace 'l' and 'r' with 'w'
         let vec = _mm_loadu_si128(in_ptr.add(i) as *const __m128i);
         let vec_but_lower = _mm_or_si128(vec, bit5);
-        let alpha_mask = _mm_and_si128(_mm_cmpgt_epi8(vec_but_lower, splat_backtick), _mm_cmpgt_epi8(splat_open_brace, vec_but_lower));
-        let replace_mask = _mm_or_si128(_mm_cmpeq_epi8(vec_but_lower, splat_l), _mm_cmpeq_epi8(vec_but_lower, splat_r));
+        let alpha_mask = _mm_and_si128(
+            _mm_cmpgt_epi8(vec_but_lower, splat_backtick),
+            _mm_cmpgt_epi8(splat_open_brace, vec_but_lower),
+        );
+        let replace_mask = _mm_or_si128(
+            _mm_cmpeq_epi8(vec_but_lower, splat_l),
+            _mm_cmpeq_epi8(vec_but_lower, splat_r),
+        );
         let replaced = _mm_blendv_epi8(vec_but_lower, splat_w, replace_mask);
         // make sure only alphabetical characters are lowercased and replaced
         let mut res = _mm_blendv_epi8(vec, replaced, alpha_mask);
@@ -334,18 +373,24 @@ unsafe fn replace_and_stutter_sse(rng: &mut XorShift32, in_bytes: &[u8], mut len
         // sometimes, add a stutter if there is a space, tab, or newline followed by any letter
         let space_mask = _mm_or_si128(
             _mm_cmpeq_epi8(vec, splat_space),
-            _mm_or_si128(_mm_cmpeq_epi8(vec, splat_tab), _mm_cmpeq_epi8(vec, splat_newline))
+            _mm_or_si128(
+                _mm_cmpeq_epi8(vec, splat_tab),
+                _mm_cmpeq_epi8(vec, splat_newline),
+            ),
         );
         let space_and_alpha_mask = _mm_and_si128(_mm_slli_si128(space_mask, 1), alpha_mask);
         let stutter_mask = _mm_movemask_epi8(space_and_alpha_mask) as u32;
 
         _mm_storeu_si128(out_ptr as *mut __m128i, res);
 
-        if stutter_mask != 0 {
+        if false {
             let stutter_idx = stutter_mask.trailing_zeros() as usize;
             // shuffle to shift by amount only known at runtime
             res = _mm_shuffle_epi8(res, _mm_add_epi8(indexes, _mm_set1_epi8(stutter_idx as i8)));
-            _mm_storeu_si128(out_ptr.add(stutter_idx) as *mut __m128i, _mm_insert_epi8(res, b'-' as i32, 1));
+            _mm_storeu_si128(
+                out_ptr.add(stutter_idx) as *mut __m128i,
+                _mm_insert_epi8(res, b'-' as i32, 1),
+            );
             // decide whether to stutter in a branchless way
             // a branch would mispredict often since this is random
             let increment = if rng.gen_bool() { 2 } else { 0 };
@@ -374,13 +419,19 @@ mod tests {
         let s = "Hey, I think I really love you. Do you want a headpat?";
         let res_bytes = uwuify_sse(s.as_bytes(), &mut temp_bytes1, &mut temp_bytes2);
         let res = str::from_utf8(res_bytes).unwrap();
-        assert_eq!(res, "hey, (ꈍᴗꈍ) i think i weawwy wuv you. ^•ﻌ•^ do y-you want a headpat?");
+        assert_eq!(
+            res,
+            "hey, (ꈍᴗꈍ) i think i weawwy wuv you. ^•ﻌ•^ do y-you want a headpat?"
+        );
     }
 
     #[test]
     fn test_uwuify_str_sse() {
         let s = "Hey, I think I really love you. Do you want a headpat?";
         let res = uwuify_str_sse(s);
-        assert_eq!(res, "hey, (ꈍᴗꈍ) i think i weawwy wuv you. ^•ﻌ•^ do y-you want a headpat?");
+        assert_eq!(
+            res,
+            "hey, (ꈍᴗꈍ) i think i weawwy wuv you. ^•ﻌ•^ do y-you want a headpat?"
+        );
     }
 }
